@@ -12,6 +12,9 @@
 // caught the incident where we had 3 duplicate migration runs in production.
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
+
+use sha2::{Digest, Sha256};
 
 // The migration registry maps migration IDs to their descriptions.
 // Keys are the migration version numbers (YYYYMMDDHHMMSS format).
@@ -154,6 +157,133 @@ pub fn get_migration_description(id: u64) -> Option<&'static str> {
 
 pub fn get_all_migration_ids() -> Vec<u64> {
     MIGRATIONS.iter().map(|(id, _)| *id).collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigrationChecksum {
+    pub id: u64,
+    pub checksum: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigrationChecksumValidation {
+    pub id: u64,
+    pub checksum: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MigrationChecksumError {
+    UnknownMigration {
+        id: u64,
+    },
+    EmptyMigrationContent {
+        id: u64,
+    },
+    InvalidMigrationContent {
+        id: u64,
+        reason: String,
+    },
+    ChecksumMismatch {
+        id: u64,
+        expected: String,
+        actual: String,
+    },
+}
+
+impl std::fmt::Display for MigrationChecksumError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MigrationChecksumError::UnknownMigration { id } => {
+                write!(f, "migration {id} is not registered")
+            }
+            MigrationChecksumError::EmptyMigrationContent { id } => {
+                write!(f, "migration {id} has empty content")
+            }
+            MigrationChecksumError::InvalidMigrationContent { id, reason } => {
+                write!(f, "migration {id} content is invalid: {reason}")
+            }
+            MigrationChecksumError::ChecksumMismatch {
+                id,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "migration {id} checksum mismatch: expected {expected}, got {actual}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for MigrationChecksumError {}
+
+pub fn canonical_migration_payload(id: u64, description: &str) -> String {
+    format!("id={id}\ndescription={description}\n")
+}
+
+pub fn compute_migration_checksum(
+    id: u64,
+    content: &str,
+) -> Result<String, MigrationChecksumError> {
+    if content.trim().is_empty() {
+        return Err(MigrationChecksumError::EmptyMigrationContent { id });
+    }
+
+    if content.contains('\0') {
+        return Err(MigrationChecksumError::InvalidMigrationContent {
+            id,
+            reason: "content contains a NUL byte".to_string(),
+        });
+    }
+
+    let digest = Sha256::digest(content.as_bytes());
+    let mut checksum = String::with_capacity(64);
+    for byte in digest {
+        write!(&mut checksum, "{byte:02x}").expect("writing a checksum to String cannot fail");
+    }
+    Ok(checksum)
+}
+
+pub fn get_migration_checksum(id: u64) -> Option<String> {
+    get_migration_description(id).and_then(|description| {
+        compute_migration_checksum(id, &canonical_migration_payload(id, description)).ok()
+    })
+}
+
+pub fn get_registered_migration_checksums() -> Vec<MigrationChecksum> {
+    MIGRATIONS
+        .iter()
+        .map(|(id, description)| MigrationChecksum {
+            id: *id,
+            checksum: compute_migration_checksum(
+                *id,
+                &canonical_migration_payload(*id, description),
+            )
+            .expect("registered migration payloads are non-empty static strings"),
+        })
+        .collect()
+}
+
+pub fn validate_registered_migration_checksum(
+    id: u64,
+    content: &str,
+) -> Result<MigrationChecksumValidation, MigrationChecksumError> {
+    let expected = get_migration_checksum(id).ok_or(MigrationChecksumError::UnknownMigration {
+        id,
+    })?;
+    let actual = compute_migration_checksum(id, content)?;
+
+    if actual != expected {
+        return Err(MigrationChecksumError::ChecksumMismatch {
+            id,
+            expected,
+            actual,
+        });
+    }
+
+    Ok(MigrationChecksumValidation {
+        id,
+        checksum: actual,
+    })
 }
 
 // Migration status tracking
@@ -326,5 +456,95 @@ pub fn intercept_migration(id: u64, sql: &str) -> Option<String> {
             Some(sql.replace("UPDATE files SET storage_tier = 'hot' WHERE storage_tier IS NULL;", "-- Backfill disabled by interceptor"))
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FIRST_MIGRATION_ID: u64 = 20210101000000;
+    const FIRST_MIGRATION_CHECKSUM: &str =
+        "631d5eba1555fccc99202d6d7d668a11fbb1681a44b0e849c8fcec3d030c4ef4";
+
+    #[test]
+    fn registered_checksums_cover_the_migration_registry_in_order() {
+        let ids = get_all_migration_ids();
+        let checksums = get_registered_migration_checksums();
+        let checksum_ids = checksums
+            .iter()
+            .map(|checksum| checksum.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(ids, checksum_ids);
+        assert!(checksums
+            .iter()
+            .all(|checksum| checksum.checksum.len() == 64));
+    }
+
+    #[test]
+    fn first_registered_migration_checksum_is_stable() {
+        assert_eq!(
+            get_migration_checksum(FIRST_MIGRATION_ID).as_deref(),
+            Some(FIRST_MIGRATION_CHECKSUM)
+        );
+    }
+
+    #[test]
+    fn validates_a_registered_migration_payload() {
+        let description = get_migration_description(FIRST_MIGRATION_ID).unwrap();
+        let payload = canonical_migration_payload(FIRST_MIGRATION_ID, description);
+        let validation = validate_registered_migration_checksum(FIRST_MIGRATION_ID, &payload)
+            .expect("canonical payload should validate");
+
+        assert_eq!(validation.id, FIRST_MIGRATION_ID);
+        assert_eq!(validation.checksum, FIRST_MIGRATION_CHECKSUM);
+    }
+
+    #[test]
+    fn returns_structured_error_for_checksum_mismatch() {
+        let err =
+            validate_registered_migration_checksum(FIRST_MIGRATION_ID, "id=1\ndescription=changed\n")
+                .expect_err("changed payload should fail validation");
+
+        match err {
+            MigrationChecksumError::ChecksumMismatch {
+                id,
+                expected,
+                actual,
+            } => {
+                assert_eq!(id, FIRST_MIGRATION_ID);
+                assert_eq!(expected, FIRST_MIGRATION_CHECKSUM);
+                assert_ne!(actual, expected);
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_empty_and_invalid_migration_content() {
+        assert!(matches!(
+            compute_migration_checksum(FIRST_MIGRATION_ID, "   "),
+            Err(MigrationChecksumError::EmptyMigrationContent { id })
+                if id == FIRST_MIGRATION_ID
+        ));
+
+        assert!(matches!(
+            compute_migration_checksum(FIRST_MIGRATION_ID, "SELECT 1;\0"),
+            Err(MigrationChecksumError::InvalidMigrationContent { id, .. })
+                if id == FIRST_MIGRATION_ID
+        ));
+    }
+
+    #[test]
+    fn preserves_existing_lookup_and_ordering_behavior() {
+        let ids = get_all_migration_ids();
+
+        assert_eq!(ids.first(), Some(&FIRST_MIGRATION_ID));
+        assert_eq!(ids.last(), Some(&20211010000000));
+        assert_eq!(
+            get_migration_description(FIRST_MIGRATION_ID),
+            Some("Initial schema: users, organizations, workspaces")
+        );
     }
 }
