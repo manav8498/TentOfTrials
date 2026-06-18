@@ -254,6 +254,48 @@ def create_migration(description: str) -> str:
     return version
 
 
+def generate_migration_plan(direction: str = "up", version: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Generate a machine-readable dry-run plan without executing psql."""
+    plan = []
+    status = get_migration_status()
+
+    if direction == "up":
+        pending = [m for m in status if not m["applied"]]
+        for m in pending:
+            plan.append({
+                "version": m["version"],
+                "description": m["description"],
+                "direction": "up",
+                "would_be_attempted": True,
+            })
+    elif direction == "down" and version:
+        target = next((m for m in status if m["version"] == version), None)
+        if target:
+            plan.append({
+                "version": target["version"],
+                "description": target["description"],
+                "direction": "down",
+                "would_be_attempted": True,
+            })
+        else:
+            plan.append({
+                "version": version,
+                "description": "NOT FOUND",
+                "direction": "down",
+                "would_be_attempted": False,
+            })
+    elif direction == "status":
+        for m in status:
+            plan.append({
+                "version": m["version"],
+                "description": m["description"],
+                "direction": "n/a",
+                "would_be_attempted": not m["applied"],
+            })
+
+    return plan
+
+
 def main():
     parser = argparse.ArgumentParser(description="Database migration tool")
     parser.add_argument("--up", action="store_true", help="Apply all pending migrations")
@@ -262,11 +304,16 @@ def main():
     parser.add_argument("--status", action="store_true", help="Show migration status")
     parser.add_argument("--create", help="Create a new migration file")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done")
+    parser.add_argument("--plan", action="store_true", help="Generate machine-readable dry-run plan (JSON)")
     parser.add_argument("--seed", action="store_true", help="Apply seed data")
     parser.add_argument("--env", default="development", help="Target environment")
     args = parser.parse_args()
 
     if args.status:
+        if args.plan:
+            plan = generate_migration_plan("status")
+            print(json.dumps(plan, indent=2))
+            return 0
         status = get_migration_status()
         print(f"\nMigration status:")
         print(f"{'Version':<20} {'Description':<40} {'Status':<10}")
@@ -277,6 +324,10 @@ def main():
         return 0
 
     if args.up:
+        if args.plan:
+            plan = generate_migration_plan("up")
+            print(json.dumps(plan, indent=2))
+            return 0
         success = run_all_migrations(args.dry_run)
         return 0 if success else 1
 
@@ -284,6 +335,10 @@ def main():
         if not args.version:
             print("--version is required for rollback")
             return 1
+        if args.plan:
+            plan = generate_migration_plan("down", args.version)
+            print(json.dumps(plan, indent=2))
+            return 0
         success = apply_migration(args.version, "down")
         return 0 if success else 1
 
