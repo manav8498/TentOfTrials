@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-06-20T10:42:18.023971+00:00",
+  "commit": "e80bbc3a",
+  "diagnostic_logd": "diagnostic/build-e80bbc3a.logd",
+  "diagnostic_logd_error": null,
+  "message_blocker": null,
+  "chunked": false,
+  "chunk_size_bytes": null,
+  "password": "46d8e69f990198669758",
+  "decrypt_command": "encryptly unpack diagnostic/build-e80bbc3a.logd <outdir> --password 46d8e69f990198669758",
+  "total_modules": 1,
+  "passed": 1,
+  "failed": 0,
+  "modules": [
+    {
+      "name": "openapi-tools",
+      "status": "PASS",
+      "elapsed_seconds": 0.041,
+      "artifact": null,
+      "output": ""
+    }
+  ],
+  "pr_note": "Include the encrypted diagnostic logd artifact(s): diagnostic/build-e80bbc3a.logd. The encrypted .logd is the required diagnostic content for PR review; this JSON file is metadata. Maintainers may ask you to remove these diagnostic artifacts before merging."
+}
