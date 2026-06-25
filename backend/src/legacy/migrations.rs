@@ -313,6 +313,14 @@ pub fn get_all_migration_ids() -> Vec<u64> {
     MIGRATIONS.iter().map(|(id, _)| *id).collect()
 }
 
+fn get_migration_payload(id: u64) -> Result<String, MigrationChecksumError> {
+    let description =
+        get_migration_description(id).ok_or(MigrationChecksumError::UnknownMigration(id))?;
+    Ok(format!(
+        "-- MIGRATION_ID: {id}\n-- MIGRATION_DESCRIPTION: {description}\n"
+    ))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MigrationChecksum {
     pub id: u64,
@@ -378,17 +386,17 @@ pub fn compute_migration_checksum(
 }
 
 pub fn get_migration_checksum(id: u64) -> Result<MigrationChecksum, MigrationChecksumError> {
-    let description =
-        get_migration_description(id).ok_or(MigrationChecksumError::UnknownMigration(id))?;
-    let checksum = compute_migration_checksum(id, description)?;
+    let payload = get_migration_payload(id)?;
+    let checksum = compute_migration_checksum(id, &payload)?;
     Ok(MigrationChecksum { id, checksum })
 }
 
 pub fn get_all_migration_checksums() -> Result<Vec<MigrationChecksum>, MigrationChecksumError> {
     MIGRATIONS
         .iter()
-        .map(|(id, description)| {
-            compute_migration_checksum(*id, description)
+        .map(|(id, _)| {
+            let payload = get_migration_payload(*id)?;
+            compute_migration_checksum(*id, &payload)
                 .map(|checksum| MigrationChecksum { id: *id, checksum })
         })
         .collect()
@@ -617,11 +625,7 @@ mod tests {
         assert!(checksum.checksum.chars().all(|c| c.is_ascii_hexdigit()));
         assert_eq!(
             checksum.checksum,
-            compute_migration_checksum(
-                20210101000000,
-                "Initial schema: users, organizations, workspaces"
-            )
-            .expect("checksum")
+            "01924c910f1458d2d793c8653f9ec413d6b0ce4e365093a440713681c477cc4a"
         );
     }
 
@@ -679,12 +683,115 @@ mod tests {
     #[test]
     fn preserves_registry_order_when_collecting_checksums() {
         let ids = get_all_migration_ids();
+        let expected_ids = vec![
+            20210101000000,
+            20210102000000,
+            20210103000000,
+            20210104000000,
+            20210105000000,
+            20210106000000,
+            20210107000000,
+            20210108000000,
+            20210109000000,
+            20210110000000,
+            20210201000000,
+            20210202000000,
+            20210203000000,
+            20210204000000,
+            20210205000000,
+            20210206000000,
+            20210207000000,
+            20210208000000,
+            20210209000000,
+            20210210000000,
+            20210301000000,
+            20210302000000,
+            20210303000000,
+            20210304000000,
+            20210305000000,
+            20210306000000,
+            20210307000000,
+            20210308000000,
+            20210309000000,
+            20210310000000,
+            20210401000000,
+            20210402000000,
+            20210403000000,
+            20210404000000,
+            20210405000000,
+            20210406000000,
+            20210407000000,
+            20210408000000,
+            20210409000000,
+            20210410000000,
+            20210501000000,
+            20210502000000,
+            20210503000000,
+            20210504000000,
+            20210505000000,
+            20210506000000,
+            20210507000000,
+            20210508000000,
+            20210509000000,
+            20210510000000,
+            20210601000000,
+            20210602000000,
+            20210603000000,
+            20210604000000,
+            20210605000000,
+            20210606000000,
+            20210607000000,
+            20210608000000,
+            20210609000000,
+            20210610000000,
+            20210701000000,
+            20210702000000,
+            20210703000000,
+            20210704000000,
+            20210705000000,
+            20210706000000,
+            20210707000000,
+            20210708000000,
+            20210709000000,
+            20210710000000,
+            20210801000000,
+            20210802000000,
+            20210803000000,
+            20210804000000,
+            20210805000000,
+            20210806000000,
+            20210807000000,
+            20210808000000,
+            20210809000000,
+            20210810000000,
+            20210901000000,
+            20210902000000,
+            20210903000000,
+            20210904000000,
+            20210905000000,
+            20210906000000,
+            20210907000000,
+            20210908000000,
+            20210909000000,
+            20210910000000,
+            20211001000000,
+            20211002000000,
+            20211003000000,
+            20211004000000,
+            20211005000000,
+            20211006000000,
+            20211007000000,
+            20211008000000,
+            20211009000000,
+            20211010000000,
+        ];
         let checksum_ids: Vec<u64> = get_all_migration_checksums()
             .expect("all checksums")
             .into_iter()
             .map(|entry| entry.id)
             .collect();
 
+        assert_eq!(ids, expected_ids);
         assert_eq!(checksum_ids, ids);
     }
 }
