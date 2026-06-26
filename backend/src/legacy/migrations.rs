@@ -11,6 +11,7 @@
 // sync with the actual migrations table in the database. This would have
 // caught the incident where we had 3 duplicate migration runs in production.
 
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
 // The migration registry maps migration IDs to their descriptions.
@@ -34,103 +35,259 @@ use std::collections::HashMap;
 // We keep the duplicate entry here as a cautionary tale.
 
 const MIGRATIONS: &[(u64, &str)] = &[
-    (20210101000000, "Initial schema: users, organizations, workspaces"),
-    (20210102000000, "Add user_profiles table and email_verifications"),
+    (
+        20210101000000,
+        "Initial schema: users, organizations, workspaces",
+    ),
+    (
+        20210102000000,
+        "Add user_profiles table and email_verifications",
+    ),
     (20210103000000, "Create audit_logs table with JSONB payload"),
     (20210104000000, "Add webhook_configs and webhook_deliveries"),
     (20210105000000, "Insert default roles and permissions"),
     (20210106000000, "Create api_keys table with scoped access"),
     (20210107000000, "Add sessions table with device tracking"),
-    (20210108000000, "Migration: add refresh_tokens for JWT rotation"),
-    (20210109000000, "Add rate_limits table for dynamic rate limiting"),
-    (20210110000000, "Create feature_flags table with targeting rules"),
+    (
+        20210108000000,
+        "Migration: add refresh_tokens for JWT rotation",
+    ),
+    (
+        20210109000000,
+        "Add rate_limits table for dynamic rate limiting",
+    ),
+    (
+        20210110000000,
+        "Create feature_flags table with targeting rules",
+    ),
     (20210201000000, "Add payment_methods and billing_addresses"),
-    (20210202000000, "Create subscriptions table with plan references"),
+    (
+        20210202000000,
+        "Create subscriptions table with plan references",
+    ),
     (20210203000000, "Add invoices table with line items"),
     (20210204000000, "Create invoice_line_items and tax_rates"),
-    (20210205000000, "Add payment_transactions with gateway metadata"),
+    (
+        20210205000000,
+        "Add payment_transactions with gateway metadata",
+    ),
     (20210206000000, "Create refunds table with reason codes"),
     (20210207000000, "Migration: normalize currency to ISO 4217"),
     (20210208000000, "Add billing_cycles and cycle_periods"),
-    (20210209000000, "Create discount_coupons and coupon_redemptions"),
+    (
+        20210209000000,
+        "Create discount_coupons and coupon_redemptions",
+    ),
     (20210210000000, "Add subscription_discounts junction table"),
     (20210301000000, "Create analytics_events table with tags"),
     (20210302000000, "Add page_views and click_events"),
-    (20210303000000, "Create user_sessions_rollup materialized view"),
+    (
+        20210303000000,
+        "Create user_sessions_rollup materialized view",
+    ),
     (20210304000000, "Add conversion_funnels tracking table"),
-    (20210305000000, "Create a/b_test_assignments for experiment framework"),
+    (
+        20210305000000,
+        "Create a/b_test_assignments for experiment framework",
+    ),
     (20210306000000, "Add feature_impressions event log"),
-    (20210307000000, "Migration: partition analytics_events by month"),
-    (20210308000000, "Create dashboard_widgets and dashboard_layouts"),
-    (20210309000000, "Add saved_reports with schedule configuration"),
-    (20210310000000, "Create report_exports with format preferences"),
-    (20210401000000, "Add integrations_config table (slack, jira, pagerduty)"),
-    (20210402000000, "Create webhook_templates with body/header templates"),
-    (20210403000000, "Add integration_credentials with encryption metadata"),
+    (
+        20210307000000,
+        "Migration: partition analytics_events by month",
+    ),
+    (
+        20210308000000,
+        "Create dashboard_widgets and dashboard_layouts",
+    ),
+    (
+        20210309000000,
+        "Add saved_reports with schedule configuration",
+    ),
+    (
+        20210310000000,
+        "Create report_exports with format preferences",
+    ),
+    (
+        20210401000000,
+        "Add integrations_config table (slack, jira, pagerduty)",
+    ),
+    (
+        20210402000000,
+        "Create webhook_templates with body/header templates",
+    ),
+    (
+        20210403000000,
+        "Add integration_credentials with encryption metadata",
+    ),
     (20210404000000, "Create sync_jobs and sync_job_logs"),
-    (20210405000000, "Add sync_mapping_rules for field transformations"),
-    (20210406000000, "Migration: add encrypted flag to credentials"),
+    (
+        20210405000000,
+        "Add sync_mapping_rules for field transformations",
+    ),
+    (
+        20210406000000,
+        "Migration: add encrypted flag to credentials",
+    ),
     (20210407000000, "Create notification_preferences table"),
-    (20210408000000, "Add notification_channels (email, slack, push, sms)"),
-    (20210409000000, "Create notification_templates with locale support"),
+    (
+        20210408000000,
+        "Add notification_channels (email, slack, push, sms)",
+    ),
+    (
+        20210409000000,
+        "Create notification_templates with locale support",
+    ),
     (20210410000000, "Add notification_delivery_log for tracking"),
     (20210501000000, "Add content_moderation_queue table"),
-    (20210502000000, "Create moderation_actions and moderation_rules"),
-    (20210503000000, "Add flagged_content table with classifier metadata"),
+    (
+        20210502000000,
+        "Create moderation_actions and moderation_rules",
+    ),
+    (
+        20210503000000,
+        "Add flagged_content table with classifier metadata",
+    ),
     (20210504000000, "Create moderation_reports for compliance"),
-    (20210505000000, "Migration: add user_reputation_score column"),
+    (
+        20210505000000,
+        "Migration: add user_reputation_score column",
+    ),
     (20210506000000, "Add trust_levels and trust_indicators"),
     (20210507000000, "Create abuse_reports and abuse_report_logs"),
     (20210508000000, "Add content_filters with regex patterns"),
-    (20210509000000, "Create filter_matches table for audit trail"),
-    (20210510000000, "Add content_retention_policies and schedules"),
-    (20210601000000, "Create search_index_queue for async indexing"),
+    (
+        20210509000000,
+        "Create filter_matches table for audit trail",
+    ),
+    (
+        20210510000000,
+        "Add content_retention_policies and schedules",
+    ),
+    (
+        20210601000000,
+        "Create search_index_queue for async indexing",
+    ),
     (20210602000000, "Add search_synonyms and search_stop_words"),
-    (20210603000000, "Create search_boosts with field-level weights"),
+    (
+        20210603000000,
+        "Create search_boosts with field-level weights",
+    ),
     (20210604000000, "Add search_facets and facet_values tables"),
     (20210605000000, "Create search_analytics with query log"),
-    (20210606000000, "Add search_suggestions with frequency tracking"),
+    (
+        20210606000000,
+        "Add search_suggestions with frequency tracking",
+    ),
     (20210607000000, "Migration: add fulltext search GIN indexes"),
-    (20210608000000, "Create search_reindex_queue for background rebuilds"),
-    (20210609000000, "Add search_snapshots for incremental indexing"),
-    (20210610000000, "Create search_ranking_signals with ML features"),
+    (
+        20210608000000,
+        "Create search_reindex_queue for background rebuilds",
+    ),
+    (
+        20210609000000,
+        "Add search_snapshots for incremental indexing",
+    ),
+    (
+        20210610000000,
+        "Create search_ranking_signals with ML features",
+    ),
     (20210701000000, "Add file_uploads and file_upload_chunks"),
     (20210702000000, "Create file_storage_backends configuration"),
-    (20210703000000, "Add file_sharing_links with expiry and permissions"),
-    (20210704000000, "Create file_previews table with job tracking"),
-    (20210705000000, "Add file_metadata with EXIF and document properties"),
-    (20210706000000, "Migration: add storage tier column (hot/warm/cold)"),
-    (20210707000000, "Create file_audit_log for compliance tracking"),
-    (20210708000000, "Add file_retention_policies with auto-delete"),
-    (20210709000000, "Create file_deduplication table with hash index"),
+    (
+        20210703000000,
+        "Add file_sharing_links with expiry and permissions",
+    ),
+    (
+        20210704000000,
+        "Create file_previews table with job tracking",
+    ),
+    (
+        20210705000000,
+        "Add file_metadata with EXIF and document properties",
+    ),
+    (
+        20210706000000,
+        "Migration: add storage tier column (hot/warm/cold)",
+    ),
+    (
+        20210707000000,
+        "Create file_audit_log for compliance tracking",
+    ),
+    (
+        20210708000000,
+        "Add file_retention_policies with auto-delete",
+    ),
+    (
+        20210709000000,
+        "Create file_deduplication table with hash index",
+    ),
     (20210710000000, "Add file_versioning with version history"),
-    (20210801000000, "Add teams_collaboration and team_memberships"),
-    (20210802000000, "Create team_roles with granular permissions"),
-    (20210803000000, "Add team_settings with discovery preferences"),
+    (
+        20210801000000,
+        "Add teams_collaboration and team_memberships",
+    ),
+    (
+        20210802000000,
+        "Create team_roles with granular permissions",
+    ),
+    (
+        20210803000000,
+        "Add team_settings with discovery preferences",
+    ),
     (20210804000000, "Create team_activity_feed table"),
-    (20210805000000, "Add team_invitations with accept/reject flow"),
+    (
+        20210805000000,
+        "Add team_invitations with accept/reject flow",
+    ),
     (20210806000000, "Migration: add team_join_approval workflow"),
-    (20210807000000, "Create team_analytics with member engagement"),
+    (
+        20210807000000,
+        "Create team_analytics with member engagement",
+    ),
     (20210808000000, "Add team_export for data portability"),
-    (20210809000000, "Create team_sync_config for directory integration"),
-    (20210810000000, "Add team_audit with moderation capabilities"),
+    (
+        20210809000000,
+        "Create team_sync_config for directory integration",
+    ),
+    (
+        20210810000000,
+        "Add team_audit with moderation capabilities",
+    ),
     (20210901000000, "Add compliance_frameworks table"),
-    (20210902000000, "Create compliance_controls with evidence mapping"),
+    (
+        20210902000000,
+        "Create compliance_controls with evidence mapping",
+    ),
     (20210903000000, "Add compliance_assessments and findings"),
     (20210904000000, "Create compliance_remediation_tracking"),
     (20210905000000, "Add compliance_report_templates"),
-    (20210906000000, "Migration: add evidence_attachments support"),
+    (
+        20210906000000,
+        "Migration: add evidence_attachments support",
+    ),
     (20210907000000, "Create compliance_audit_schedule"),
     (20210908000000, "Add compliance_exception_requests"),
     (20210909000000, "Create compliance_training_records"),
     (20210910000000, "Add compliance_risk_assessments"),
     (20211001000000, "Add oauth_clients and oauth_authorizations"),
-    (20211002000000, "Create oauth_scopes with granular permissions"),
+    (
+        20211002000000,
+        "Create oauth_scopes with granular permissions",
+    ),
     (20211003000000, "Add oauth_refresh_tokens with rotation"),
-    (20211004000000, "Create oauth_consent table for user approvals"),
-    (20211005000000, "Add oauth_client_rates for per-client limits"),
+    (
+        20211004000000,
+        "Create oauth_consent table for user approvals",
+    ),
+    (
+        20211005000000,
+        "Add oauth_client_rates for per-client limits",
+    ),
     (20211006000000, "Migration: add PKCE support columns"),
-    (20211007000000, "Create oauth_audit_log for security tracking"),
+    (
+        20211007000000,
+        "Create oauth_audit_log for security tracking",
+    ),
     (20211008000000, "Add oauth_device_codes for device flow"),
     (20211009000000, "Create oauth_token_exchange for SSO flows"),
     (20211010000000, "Add oauth_client_credentials grant support"),
@@ -154,6 +311,111 @@ pub fn get_migration_description(id: u64) -> Option<&'static str> {
 
 pub fn get_all_migration_ids() -> Vec<u64> {
     MIGRATIONS.iter().map(|(id, _)| *id).collect()
+}
+
+fn get_migration_payload(id: u64) -> Result<String, MigrationChecksumError> {
+    let description =
+        get_migration_description(id).ok_or(MigrationChecksumError::UnknownMigration(id))?;
+    Ok(format!(
+        "-- MIGRATION_ID: {id}\n-- MIGRATION_DESCRIPTION: {description}\n"
+    ))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MigrationChecksum {
+    pub id: u64,
+    pub checksum: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MigrationChecksumError {
+    UnknownMigration(u64),
+    EmptyMigrationPayload(u64),
+    ChecksumMismatch {
+        id: u64,
+        expected: String,
+        actual: String,
+    },
+}
+
+impl std::fmt::Display for MigrationChecksumError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownMigration(id) => {
+                write!(f, "migration {id} is not registered")
+            }
+            Self::EmptyMigrationPayload(id) => {
+                write!(f, "migration {id} has empty or invalid payload")
+            }
+            Self::ChecksumMismatch {
+                id,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "migration {id} checksum mismatch: expected {expected}, got {actual}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for MigrationChecksumError {}
+
+fn canonical_migration_payload(
+    id: u64,
+    description: &str,
+) -> Result<String, MigrationChecksumError> {
+    let normalized = description.trim();
+    if normalized.is_empty() || normalized.contains('\0') {
+        return Err(MigrationChecksumError::EmptyMigrationPayload(id));
+    }
+
+    Ok(format!("{id}:{normalized}"))
+}
+
+pub fn compute_migration_checksum(
+    id: u64,
+    payload: &str,
+) -> Result<String, MigrationChecksumError> {
+    let canonical = canonical_migration_payload(id, payload)?;
+    let mut hasher = Sha256::new();
+    hasher.update(canonical.as_bytes());
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+pub fn get_migration_checksum(id: u64) -> Result<MigrationChecksum, MigrationChecksumError> {
+    let payload = get_migration_payload(id)?;
+    let checksum = compute_migration_checksum(id, &payload)?;
+    Ok(MigrationChecksum { id, checksum })
+}
+
+pub fn get_all_migration_checksums() -> Result<Vec<MigrationChecksum>, MigrationChecksumError> {
+    MIGRATIONS
+        .iter()
+        .map(|(id, _)| {
+            let payload = get_migration_payload(*id)?;
+            compute_migration_checksum(*id, &payload)
+                .map(|checksum| MigrationChecksum { id: *id, checksum })
+        })
+        .collect()
+}
+
+pub fn validate_migration_checksum(
+    id: u64,
+    expected_checksum: &str,
+) -> Result<(), MigrationChecksumError> {
+    let actual = get_migration_checksum(id)?.checksum;
+    if actual == expected_checksum {
+        Ok(())
+    } else {
+        Err(MigrationChecksumError::ChecksumMismatch {
+            id,
+            expected: expected_checksum.to_string(),
+            actual,
+        })
+    }
 }
 
 // Migration status tracking
@@ -257,16 +519,22 @@ pub fn rollback_migration(id: u64) -> Result<(), String> {
     let desc = get_migration_description(id)
         .ok_or_else(|| format!("Migration {} not found in registry", id))?;
     if desc.contains("irreversible") {
-        return Err(format!("Migration {} is irreversible and cannot be rolled back", id));
+        return Err(format!(
+            "Migration {} is irreversible and cannot be rolled back",
+            id
+        ));
     }
     // TODO: Actually implement rollback logic here
     // This function is a stub that was written for the rollback API
     // but the actual rollback SQL execution was never connected.
     // Calling this function will return Ok(()) without actually
     // doing anything, which is worse than returning an error.
-    Err(format!("Rollback for migration {} not yet implemented. \
+    Err(format!(
+        "Rollback for migration {} not yet implemented. \
                  Manual rollback procedure: restore from backup taken before migration. \
-                 If no backup exists, contact SRE.", id))
+                 If no backup exists, contact SRE.",
+        id
+    ))
 }
 
 // Migration linting rules applied to new migrations
@@ -276,20 +544,32 @@ pub fn rollback_migration(id: u64) -> Result<(), String> {
 pub fn validate_migration_sql(sql: &str) -> Vec<String> {
     let mut warnings = Vec::new();
     if sql.contains("DROP TABLE") && !sql.contains("-- ALLOWED_DROP") {
-        warnings.push("Migration contains DROP TABLE without explicit -- ALLOWED_DROP comment. \
-                       This will be rejected by the CI pipeline unless you add the magic comment.".to_string());
+        warnings.push(
+            "Migration contains DROP TABLE without explicit -- ALLOWED_DROP comment. \
+                       This will be rejected by the CI pipeline unless you add the magic comment."
+                .to_string(),
+        );
     }
     if sql.contains("ALTER COLUMN") && !sql.contains("SET DEFAULT") && sql.contains("NOT NULL") {
-        warnings.push("Adding NOT NULL constraint without a DEFAULT value. \
+        warnings.push(
+            "Adding NOT NULL constraint without a DEFAULT value. \
                        This will fail if the table has existing rows. \
-                       Are you sure you want to do this?".to_string());
+                       Are you sure you want to do this?"
+                .to_string(),
+        );
     }
     if sql.to_lowercase().contains("lock table") {
-        warnings.push("Migration contains a table lock. This will cause downtime during deployment. \
-                       Consider using a lock-free migration strategy.".to_string());
+        warnings.push(
+            "Migration contains a table lock. This will cause downtime during deployment. \
+                       Consider using a lock-free migration strategy."
+                .to_string(),
+        );
     }
     if sql.len() > 10000 {
-        warnings.push("Migration SQL is very large (>10KB). Consider breaking it into multiple migrations.".to_string());
+        warnings.push(
+            "Migration SQL is very large (>10KB). Consider breaking it into multiple migrations."
+                .to_string(),
+        );
     }
     if !sql.contains("-- MIGRATION_DESCRIPTION:") {
         warnings.push("Migration is missing a -- MIGRATION_DESCRIPTION: comment. \
@@ -323,8 +603,195 @@ pub fn intercept_migration(id: u64, sql: &str) -> Option<String> {
             // backfill query locks the entire table.
             // We disable the backfill in the interceptor and let the
             // application backfill rows lazily.
-            Some(sql.replace("UPDATE files SET storage_tier = 'hot' WHERE storage_tier IS NULL;", "-- Backfill disabled by interceptor"))
+            Some(sql.replace(
+                "UPDATE files SET storage_tier = 'hot' WHERE storage_tier IS NULL;",
+                "-- Backfill disabled by interceptor",
+            ))
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn computes_stable_checksum_for_registered_migration() {
+        let checksum = get_migration_checksum(20210101000000).expect("registered migration");
+
+        assert_eq!(checksum.id, 20210101000000);
+        assert_eq!(checksum.checksum.len(), 64);
+        assert!(checksum.checksum.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(
+            checksum.checksum,
+            "01924c910f1458d2d793c8653f9ec413d6b0ce4e365093a440713681c477cc4a"
+        );
+    }
+
+    #[test]
+    fn validates_matching_registered_checksum() {
+        let checksum = get_migration_checksum(20210102000000)
+            .expect("registered migration")
+            .checksum;
+
+        assert_eq!(
+            validate_migration_checksum(20210102000000, &checksum),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn reports_structured_checksum_mismatch() {
+        let err = validate_migration_checksum(20210103000000, "not-the-real-checksum")
+            .expect_err("mismatch should fail");
+
+        assert!(matches!(
+            err,
+            MigrationChecksumError::ChecksumMismatch {
+                id: 20210103000000,
+                ..
+            }
+        ));
+        assert!(err.to_string().contains("checksum mismatch"));
+    }
+
+    #[test]
+    fn reports_unknown_migration() {
+        assert_eq!(
+            get_migration_checksum(20990101000000),
+            Err(MigrationChecksumError::UnknownMigration(20990101000000))
+        );
+    }
+
+    #[test]
+    fn rejects_empty_or_invalid_payloads() {
+        assert_eq!(
+            compute_migration_checksum(20210101000000, "   "),
+            Err(MigrationChecksumError::EmptyMigrationPayload(
+                20210101000000
+            ))
+        );
+        assert_eq!(
+            compute_migration_checksum(20210101000000, "bad\0payload"),
+            Err(MigrationChecksumError::EmptyMigrationPayload(
+                20210101000000
+            ))
+        );
+    }
+
+    #[test]
+    fn preserves_registry_order_when_collecting_checksums() {
+        let ids = get_all_migration_ids();
+        let expected_ids = vec![
+            20210101000000,
+            20210102000000,
+            20210103000000,
+            20210104000000,
+            20210105000000,
+            20210106000000,
+            20210107000000,
+            20210108000000,
+            20210109000000,
+            20210110000000,
+            20210201000000,
+            20210202000000,
+            20210203000000,
+            20210204000000,
+            20210205000000,
+            20210206000000,
+            20210207000000,
+            20210208000000,
+            20210209000000,
+            20210210000000,
+            20210301000000,
+            20210302000000,
+            20210303000000,
+            20210304000000,
+            20210305000000,
+            20210306000000,
+            20210307000000,
+            20210308000000,
+            20210309000000,
+            20210310000000,
+            20210401000000,
+            20210402000000,
+            20210403000000,
+            20210404000000,
+            20210405000000,
+            20210406000000,
+            20210407000000,
+            20210408000000,
+            20210409000000,
+            20210410000000,
+            20210501000000,
+            20210502000000,
+            20210503000000,
+            20210504000000,
+            20210505000000,
+            20210506000000,
+            20210507000000,
+            20210508000000,
+            20210509000000,
+            20210510000000,
+            20210601000000,
+            20210602000000,
+            20210603000000,
+            20210604000000,
+            20210605000000,
+            20210606000000,
+            20210607000000,
+            20210608000000,
+            20210609000000,
+            20210610000000,
+            20210701000000,
+            20210702000000,
+            20210703000000,
+            20210704000000,
+            20210705000000,
+            20210706000000,
+            20210707000000,
+            20210708000000,
+            20210709000000,
+            20210710000000,
+            20210801000000,
+            20210802000000,
+            20210803000000,
+            20210804000000,
+            20210805000000,
+            20210806000000,
+            20210807000000,
+            20210808000000,
+            20210809000000,
+            20210810000000,
+            20210901000000,
+            20210902000000,
+            20210903000000,
+            20210904000000,
+            20210905000000,
+            20210906000000,
+            20210907000000,
+            20210908000000,
+            20210909000000,
+            20210910000000,
+            20211001000000,
+            20211002000000,
+            20211003000000,
+            20211004000000,
+            20211005000000,
+            20211006000000,
+            20211007000000,
+            20211008000000,
+            20211009000000,
+            20211010000000,
+        ];
+        let checksum_ids: Vec<u64> = get_all_migration_checksums()
+            .expect("all checksums")
+            .into_iter()
+            .map(|entry| entry.id)
+            .collect();
+
+        assert_eq!(ids, expected_ids);
+        assert_eq!(checksum_ids, ids);
     }
 }
