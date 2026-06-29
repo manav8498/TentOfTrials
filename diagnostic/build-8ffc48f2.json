@@ -1,0 +1,99 @@
+{
+  "generated_at": "2026-06-29T00:24:05.500722+00:00",
+  "commit": "8ffc48f2",
+  "diagnostic_logd": [
+    "diagnostic/build-8ffc48f2-part001.logd",
+    "diagnostic/build-8ffc48f2-part002.logd",
+    "diagnostic/build-8ffc48f2-part003.logd",
+    "diagnostic/build-8ffc48f2-part004.logd",
+    "diagnostic/build-8ffc48f2-part005.logd",
+    "diagnostic/build-8ffc48f2-part006.logd",
+    "diagnostic/build-8ffc48f2-part007.logd",
+    "diagnostic/build-8ffc48f2-part008.logd",
+    "diagnostic/build-8ffc48f2-part009.logd",
+    "diagnostic/build-8ffc48f2-part010.logd"
+  ],
+  "diagnostic_logd_error": null,
+  "message_blocker": null,
+  "chunked": true,
+  "chunk_size_bytes": 16777216,
+  "password": "$DIAGNOSTIC_LOGD_PASSWORD",
+  "password_env": "DIAGNOSTIC_LOGD_PASSWORD",
+  "decrypt_command": "cat diagnostic/build-8ffc48f2-part001.logd diagnostic/build-8ffc48f2-part002.logd diagnostic/build-8ffc48f2-part003.logd diagnostic/build-8ffc48f2-part004.logd diagnostic/build-8ffc48f2-part005.logd diagnostic/build-8ffc48f2-part006.logd diagnostic/build-8ffc48f2-part007.logd diagnostic/build-8ffc48f2-part008.logd diagnostic/build-8ffc48f2-part009.logd diagnostic/build-8ffc48f2-part010.logd > diagnostic/build-8ffc48f2.logd && encryptly unpack diagnostic/build-8ffc48f2.logd <outdir> --password \"$DIAGNOSTIC_LOGD_PASSWORD\"",
+  "total_modules": 10,
+  "passed": 0,
+  "failed": 10,
+  "modules": [
+    {
+      "name": "backend",
+      "status": "FAIL",
+      "elapsed_seconds": 0.002,
+      "artifact": null,
+      "output": "cargo unavailable in diagnostic environment"
+    },
+    {
+      "name": "frontend",
+      "status": "FAIL",
+      "elapsed_seconds": 0.001,
+      "artifact": null,
+      "output": "npm install failed:\nnpm unavailable in diagnostic environment"
+    },
+    {
+      "name": "market",
+      "status": "FAIL",
+      "elapsed_seconds": 0.003,
+      "artifact": null,
+      "output": "go unavailable in diagnostic environment"
+    },
+    {
+      "name": "frailbox",
+      "status": "FAIL",
+      "elapsed_seconds": 0.001,
+      "artifact": null,
+      "output": "make unavailable in diagnostic environment"
+    },
+    {
+      "name": "engine",
+      "status": "FAIL",
+      "elapsed_seconds": 0.004,
+      "artifact": null,
+      "output": "CMake configure failed:\ncmake unavailable in diagnostic environment"
+    },
+    {
+      "name": "compliance",
+      "status": "FAIL",
+      "elapsed_seconds": 0.002,
+      "artifact": null,
+      "output": "javac unavailable in diagnostic environment"
+    },
+    {
+      "name": "v2-market-stream",
+      "status": "FAIL",
+      "elapsed_seconds": 0.002,
+      "artifact": null,
+      "output": "ruby unavailable in diagnostic environment"
+    },
+    {
+      "name": "nfc-scanner",
+      "status": "FAIL",
+      "elapsed_seconds": 0.002,
+      "artifact": null,
+      "output": "luac unavailable in diagnostic environment"
+    },
+    {
+      "name": "openapi-haskell",
+      "status": "FAIL",
+      "elapsed_seconds": 0.004,
+      "artifact": null,
+      "output": "ghc unavailable in diagnostic environment"
+    },
+    {
+      "name": "openapi-tools",
+      "status": "FAIL",
+      "elapsed_seconds": 0.003,
+      "artifact": null,
+      "output": "luac unavailable in diagnostic environment"
+    }
+  ],
+  "pr_note": "Diagnostic artifacts:\n- diagnostic/build-8ffc48f2-part001.logd\n- diagnostic/build-8ffc48f2-part002.logd\n- diagnostic/build-8ffc48f2-part003.logd\n- diagnostic/build-8ffc48f2-part004.logd\n- diagnostic/build-8ffc48f2-part005.logd\n- diagnostic/build-8ffc48f2-part006.logd\n- diagnostic/build-8ffc48f2-part007.logd\n- diagnostic/build-8ffc48f2-part008.logd\n- diagnostic/build-8ffc48f2-part009.logd\n- diagnostic/build-8ffc48f2-part010.logd\n\nDecrypt password is supplied via DIAGNOSTIC_LOGD_PASSWORD at review time; the plaintext password is intentionally not committed."
+}
