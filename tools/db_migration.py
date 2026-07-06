@@ -208,9 +208,45 @@ def get_migration_status() -> List[Dict[str, Any]]:
     return status
 
 
+def build_migration_plan(
+    status: List[Dict[str, Any]],
+    direction: str = "up",
+    target_version: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    if direction not in {"up", "down"}:
+        raise ValueError("direction must be 'up' or 'down'")
+
+    if direction == "up":
+        candidates = [m for m in status if not m["applied"]]
+    else:
+        applied = [m for m in status if m["applied"]]
+        if target_version is None:
+            candidates = applied[-1:] if applied else []
+        else:
+            target_index = next(
+                (index for index, m in enumerate(applied) if m["version"] == target_version),
+                None,
+            )
+            candidates = [] if target_index is None else list(reversed(applied[target_index:]))
+
+    plan = []
+    for migration in candidates:
+        plan.append({
+            "version": migration["version"],
+            "description": migration["description"],
+            "direction": direction,
+            "would_execute": True,
+        })
+    return plan
+
+
+def print_migration_plan(plan: List[Dict[str, Any]]) -> None:
+    print(json.dumps({"migrations": plan}, indent=2))
+
+
 def run_all_migrations(dry_run: bool = False) -> bool:
     status = get_migration_status()
-    pending = [m for m in status if not m["applied"]]
+    pending = build_migration_plan(status, "up")
 
     if not pending:
         print("No pending migrations")
@@ -222,6 +258,7 @@ def run_all_migrations(dry_run: bool = False) -> bool:
 
     if dry_run:
         print("Dry run - no migrations applied")
+        print_migration_plan(pending)
         return True
 
     all_successful = True
@@ -284,6 +321,11 @@ def main():
         if not args.version:
             print("--version is required for rollback")
             return 1
+        if args.dry_run:
+            plan = build_migration_plan(get_migration_status(), "down", args.version)
+            print("Dry run - no migrations rolled back")
+            print_migration_plan(plan)
+            return 0
         success = apply_migration(args.version, "down")
         return 0 if success else 1
 
