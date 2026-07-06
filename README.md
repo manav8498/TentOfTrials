@@ -85,6 +85,17 @@ python3 build.py --module backend,frontend  # Build specific modules
 python3 build.py --release    # Release mode (Rust only)
 ```
 
+### Migration dry-run planning
+
+The database migration helper can emit a machine-readable dry-run plan without
+calling `psql`:
+
+```sh
+python3 tools/db_migration.py --up --dry-run
+python3 tools/db_migration.py --down --version 20240102000000 --dry-run
+python3 -m unittest discover -s tests -t . -v
+```
+
 ### Build diagnostics
 
 Each build writes a diagnostic bundle into the git-tracked `diagnostic/` directory. The encrypted log is named from the current commit's first 4 bytes, so it remains constant for the same commit: `build-<commit-4-bytes>.logd` (for example, `build-1a2b3c4d.logd`). It is accompanied by matching metadata (`build-<commit-4-bytes>-metadata.json`) that includes the decrypt password and module results.
