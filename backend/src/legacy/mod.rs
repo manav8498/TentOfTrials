@@ -27,6 +27,7 @@
 
 pub mod deprecations;
 pub mod migrations;
+pub mod checksum;
 pub mod v1_compat;
 // pub mod v2_compat; // TODO: Implement this when we migrate to API v2
 // pub mod v3_compat; // TODO: Remove this comment - it's never happening
